@@ -29,11 +29,6 @@ const CONTACT_TEXT =
   process.env.CONTACT_TEXT ||
   "Si preferis hablar con una persona, esperá y en breve te contestamos por acá.";
 
-// Numero de telefono (con codigo de pais, sin +, sin espacios) para
-// vincular el bot con codigo de emparejamiento en vez de QR.
-// Ejemplo Argentina: 549341XXXXXXX
-const PHONE_NUMBER = process.env.PHONE_NUMBER || "";
-
 const AUTH_FOLDER = "auth_info";
 
 function buildMenu() {
@@ -66,32 +61,23 @@ async function startBot() {
   const sock = makeWASocket({
     version,
     auth: state,
-    // Con numero de telefono usamos codigo de emparejamiento (mas facil
-    // de leer en los logs de Railway que un QR). Sin numero, se imprime QR.
-    printQRInTerminal: !PHONE_NUMBER,
+    printQRInTerminal: false,
     logger: pino({ level: "warn" }),
   });
-
-  // --- Vinculacion con codigo de emparejamiento ---
-  if (PHONE_NUMBER && !sock.authState.creds.registered) {
-    setTimeout(async () => {
-      try {
-        const code = await sock.requestPairingCode(PHONE_NUMBER);
-        console.log("========================================");
-        console.log("Codigo de emparejamiento:", code);
-        console.log("En tu celular: WhatsApp > Dispositivos vinculados");
-        console.log("> Vincular con numero de telefono > ingresa el codigo");
-        console.log("========================================");
-      } catch (err) {
-        console.error("No se pudo generar el codigo de emparejamiento:", err);
-      }
-    }, 3000);
-  }
 
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect } = update;
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      console.log("========================================");
+      console.log("QR_DATA_START");
+      console.log(qr);
+      console.log("QR_DATA_END");
+      console.log("Este codigo vence en unos 20-30 segundos.");
+      console.log("========================================");
+    }
 
     if (connection === "close") {
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
