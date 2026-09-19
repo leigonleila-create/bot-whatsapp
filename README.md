@@ -1,8 +1,9 @@
 # bot-whatsapp
 
-Bot de WhatsApp basico. Cuando alguien te escribe, responde con un menu
-(Horarios / Precios / Ubicacion / Hablar con una persona) y contesta segun
-la opcion que elijan.
+Bot de WhatsApp de **Corpore** (masajes y terapias corporales). Responde
+con Inteligencia Artificial (Groq) usando la info del negocio, y nunca
+da precio exacto, direccion exacta ni confirma turnos: esas tres cosas
+siempre las coordina Leila personalmente.
 
 ## 1. Subir estos archivos a GitHub
 
@@ -16,21 +17,18 @@ Railway va a detectar el cambio y arrancar un build automaticamente.
 
 En tu servicio de Railway, pestaña **Variables**, agrega:
 
-- `PHONE_NUMBER`: tu numero de WhatsApp con codigo de pais, sin "+" ni
-  espacios (ej: `5491112345678`).
-- Opcionales: `BUSINESS_NAME`, `HOURS_TEXT`, `PRICES_TEXT`,
-  `LOCATION_TEXT`, `CONTACT_TEXT` (mirá `.env.example` para ver el formato).
+- `GROQ_API_KEY`: tu clave gratuita de https://console.groq.com/keys
+- Opcionales: `GROQ_MODEL`, `BUSINESS_NAME`, `SERVICES_TEXT`,
+  `PAYMENT_TEXT` (mirá `.env.example` para ver el formato).
 
 ## 3. Vincular el bot con tu WhatsApp
 
-1. Una vez que el deploy termine en verde, andá a la pestaña
-   **Deployments** > el deploy activo > **Deploy Logs**.
-2. Vas a ver un mensaje con un **codigo de emparejamiento** de 8
-   caracteres.
+1. Una vez que el deploy termine en verde, entra a la URL publica del
+   servicio + `/qr` (por ejemplo `tu-servicio.up.railway.app/qr`).
+2. Vas a ver un codigo QR que se actualiza solo.
 3. En tu celular: WhatsApp > Configuracion > Dispositivos vinculados >
-   Vincular un dispositivo > **Vincular con numero de telefono** en
-   vez de escanear el QR, e ingresa ese codigo.
-4. Cuando veas "✅ Bot conectado a WhatsApp" en los logs, ya esta
+   Vincular un dispositivo, y apunta la camara al QR de la pantalla.
+4. Cuando la pagina diga "✅ Bot conectado a WhatsApp", ya esta
    funcionando.
 
 ## Importante: la sesion no es permanente

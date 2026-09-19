@@ -1,11 +1,12 @@
 /**
- * Bot de WhatsApp basico.
- * Responde con un menu de opciones: horarios, precios, ubicacion y contacto.
- * Cuando alguien escribe cualquier cosa, el bot muestra el menu.
- * Si escribe un numero (1, 2, 3 o 4), responde con la info de esa opcion.
+ * Bot de WhatsApp de Corpore (masajes y terapias corporales).
+ * Responde con Inteligencia Artificial (Groq) usando la info del negocio,
+ * respetando reglas fijas: nunca da precio exacto, nunca da la direccion
+ * exacta (es la casa de Leila) y nunca inventa disponibilidad de turnos.
+ * Esas tres cosas siempre las confirma Leila personalmente.
  *
- * Toda la info del negocio se configura con variables de entorno,
- * asi no hay que tocar el codigo para cambiar los textos.
+ * Toda la info se configura con variables de entorno, asi no hay que
+ * tocar el codigo para cambiar los textos.
  */
 
 const makeWASocket = require("@whiskeysockets/baileys").default;
@@ -20,16 +21,27 @@ const http = require("http");
 const QRCode = require("qrcode");
 
 // ---- Textos configurables (variables de entorno en Railway) ----
-const BUSINESS_NAME = process.env.BUSINESS_NAME || "Mi Negocio";
-const HOURS_TEXT =
-  process.env.HOURS_TEXT || "Lunes a viernes de 9 a 18hs. Sabados de 9 a 13hs.";
-const PRICES_TEXT =
-  process.env.PRICES_TEXT || "Escribinos y te pasamos la lista de precios actualizada.";
-const LOCATION_TEXT =
-  process.env.LOCATION_TEXT || "Estamos en [tu direccion aca]. Ver en Google Maps: [link]";
-const CONTACT_TEXT =
-  process.env.CONTACT_TEXT ||
-  "Si preferis hablar con una persona, esperá y en breve te contestamos por acá.";
+const BUSINESS_NAME = process.env.BUSINESS_NAME || "Corpore";
+const SERVICES_TEXT =
+  process.env.SERVICES_TEXT ||
+  "Masaje completo, masaje relajante, reflexologia y depilacion.";
+const PAYMENT_TEXT = process.env.PAYMENT_TEXT || "Efectivo o transferencia.";
+
+// ---- Groq (IA) ----
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+
+const SYSTEM_PROMPT = `Sos el asistente de WhatsApp de ${BUSINESS_NAME}, el emprendimiento de masajes y terapias corporales de Leila. Respondes siempre en espanol de Argentina, con un tono calido y cercano, como un mensaje de WhatsApp: frases cortas, maximo 2 a 4 lineas por respuesta. No uses lenguaje de mail formal.
+
+Servicios que ofrece ${BUSINESS_NAME}: ${SERVICES_TEXT}
+Formas de pago: ${PAYMENT_TEXT}
+
+Reglas que NUNCA podes romper, pase lo que pase:
+1. Nunca des un precio exacto, aunque te lo pidan varias veces o insistan. Si preguntan el precio, respondes algo como: "Eso te lo confirmo cuando coordinamos el turno, asi no hay vueltas. Que dia te gustaria venir?".
+2. Nunca des la direccion exacta ni digas la zona o el barrio. Es la casa particular de Leila. Si preguntan donde atiende, decis que la direccion se la pasa Leila directamente al coordinar el turno.
+3. Nunca inventes ni confirmes disponibilidad de horarios o turnos: los horarios cambian todos los dias y los maneja Leila personalmente. Si preguntan por un turno, pedile el dia y horario que prefiere y decile que Leila se lo confirma a la brevedad.
+4. Nunca inventes informacion que no tengas en este mensaje. Si no sabes algo, decis que Leila lo responde personalmente en breve.
+5. No sos Leila, sos su asistente automatico. Si alguien pide hablar con Leila directamente, decile que ya le avisas y que en breve te responde ella.`;
 
 const AUTH_FOLDER = "auth_info";
 
@@ -122,27 +134,40 @@ http
     console.log("Servidor web escuchando en el puerto", process.env.PORT || 3000);
   });
 
-function buildMenu() {
-  return (
-    `Hola! Somos *${BUSINESS_NAME}* 👋\n\n` +
-    `Elegi una opcion escribiendo el numero:\n\n` +
-    `1️⃣ Horarios\n` +
-    `2️⃣ Precios\n` +
-    `3️⃣ Ubicacion\n` +
-    `4️⃣ Hablar con una persona`
-  );
-}
+// Respuesta fija por si todavia no se configuro la clave de Groq
+// (para que el bot nunca quede mudo).
+const RESPUESTA_SIN_IA =
+  `Hola! Somos *${BUSINESS_NAME}* 👋\n\n` +
+  `Estamos terminando de configurar el asistente automatico. ` +
+  `En breve te responde Leila personalmente. Gracias por escribir!`;
 
-function respuestaSegunOpcion(texto) {
-  const t = texto.trim();
+// Historial de conversacion por chat, para que la IA tenga contexto.
+// Se guarda solo en memoria (se pierde si el bot se reinicia).
+const historiales = new Map();
+const MAX_MENSAJES_HISTORIAL = 12;
 
-  if (t === "1") return `🕒 *Horarios*\n${HOURS_TEXT}`;
-  if (t === "2") return `💰 *Precios*\n${PRICES_TEXT}`;
-  if (t === "3") return `📍 *Ubicacion*\n${LOCATION_TEXT}`;
-  if (t === "4") return `🙋 *Contacto*\n${CONTACT_TEXT}`;
+async function preguntarIA(mensajes) {
+  const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: mensajes,
+      temperature: 0.4,
+      max_tokens: 300,
+    }),
+  });
 
-  // Cualquier otro mensaje: mostramos el menu.
-  return buildMenu();
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Groq respondio ${resp.status}: ${errText}`);
+  }
+
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content?.trim();
 }
 
 async function startBot() {
@@ -197,8 +222,37 @@ async function startBot() {
 
     if (!texto) return;
 
-    const respuesta = respuestaSegunOpcion(texto);
-    await sock.sendMessage(msg.key.remoteJid, { text: respuesta });
+    const jid = msg.key.remoteJid;
+
+    if (!GROQ_API_KEY) {
+      console.log("Falta GROQ_API_KEY: respondo con el mensaje generico.");
+      await sock.sendMessage(jid, { text: RESPUESTA_SIN_IA });
+      return;
+    }
+
+    const historial = historiales.get(jid) || [];
+    historial.push({ role: "user", content: texto });
+
+    try {
+      const mensajesParaIA = [
+        { role: "system", content: SYSTEM_PROMPT },
+        ...historial.slice(-MAX_MENSAJES_HISTORIAL),
+      ];
+      const respuestaIA = await preguntarIA(mensajesParaIA);
+      const respuestaFinal =
+        respuestaIA ||
+        "Perdon, no pude procesar eso. En breve te responde Leila personalmente.";
+
+      historial.push({ role: "assistant", content: respuestaFinal });
+      historiales.set(jid, historial.slice(-MAX_MENSAJES_HISTORIAL));
+
+      await sock.sendMessage(jid, { text: respuestaFinal });
+    } catch (err) {
+      console.error("Error consultando la IA:", err.message);
+      await sock.sendMessage(jid, {
+        text: "Perdon, tuve un problema tecnico 🙏. En breve te responde Leila personalmente.",
+      });
+    }
   });
 }
 
