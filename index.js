@@ -127,6 +127,21 @@ http
       return;
     }
 
+    if (req.url === "/debug-modelos") {
+      try {
+        const r = await fetch("https://api.groq.com/openai/v1/models", {
+          headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
+        });
+        const texto = await r.text();
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(texto);
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "text/plain" });
+        res.end("Error: " + err.message);
+      }
+      return;
+    }
+
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Bot activo. Entra a /qr para ver el codigo QR.");
   })
