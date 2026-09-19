@@ -16,6 +16,8 @@ const {
 } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
 const pino = require("pino");
+const http = require("http");
+const QRCode = require("qrcode");
 
 // ---- Textos configurables (variables de entorno en Railway) ----
 const BUSINESS_NAME = process.env.BUSINESS_NAME || "Mi Negocio";
@@ -30,6 +32,36 @@ const CONTACT_TEXT =
   "Si preferis hablar con una persona, esperá y en breve te contestamos por acá.";
 
 const AUTH_FOLDER = "auth_info";
+
+// Guarda el ultimo QR generado para poder mostrarlo en /qr como imagen.
+let lastQr = null;
+
+// Servidor web chiquito: entrando a la URL publica + /qr se ve el
+// codigo QR como imagen, para escanearlo sin depender de los logs.
+http
+  .createServer(async (req, res) => {
+    if (req.url === "/qr") {
+      if (!lastQr) {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Todavia no hay QR generado, o el bot ya esta conectado. Recarga en unos segundos.");
+        return;
+      }
+      try {
+        const png = await QRCode.toBuffer(lastQr, { width: 500, margin: 2 });
+        res.writeHead(200, { "Content-Type": "image/png" });
+        res.end(png);
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "text/plain" });
+        res.end("Error generando el QR: " + err.message);
+      }
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Bot activo. Entra a /qr para ver el codigo QR.");
+  })
+  .listen(process.env.PORT || 3000, () => {
+    console.log("Servidor web escuchando en el puerto", process.env.PORT || 3000);
+  });
 
 function buildMenu() {
   return (
@@ -71,12 +103,8 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log("========================================");
-      console.log("QR_DATA_START");
-      console.log(qr);
-      console.log("QR_DATA_END");
-      console.log("Este codigo vence en unos 20-30 segundos.");
-      console.log("========================================");
+      lastQr = qr;
+      console.log("Nuevo QR generado. Entra a la URL publica + /qr para verlo.");
     }
 
     if (connection === "close") {
