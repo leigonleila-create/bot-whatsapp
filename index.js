@@ -34,21 +34,79 @@ const CONTACT_TEXT =
 const AUTH_FOLDER = "auth_info";
 
 // Guarda el ultimo QR generado para poder mostrarlo en /qr como imagen.
+// Cada QR es valido solo unos segundos, asi que tambien guardamos un
+// numero de version para saber cuando hay uno nuevo.
 let lastQr = null;
+let qrVersion = 0;
+let isConnected = false;
 
-// Servidor web chiquito: entrando a la URL publica + /qr se ve el
-// codigo QR como imagen, para escanearlo sin depender de los logs.
+// Servidor web chiquito: entrando a la URL publica + /qr se ve una
+// pagina que se actualiza sola cada pocos segundos, para siempre
+// mostrar el codigo QR mas nuevo sin tener que recargar a mano.
 http
   .createServer(async (req, res) => {
     if (req.url === "/qr") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>QR de WhatsApp</title>
+<style>
+  body { background:#111; color:#eee; font-family: sans-serif; text-align:center; padding-top:40px; }
+  img { background:#fff; padding:16px; border-radius:8px; }
+  p { max-width:420px; margin:16px auto; }
+</style>
+</head>
+<body>
+  <h2>Escaneá este codigo con WhatsApp</h2>
+  <p>La pagina se actualiza sola. Escaneá apenas lo veas: cada codigo dura pocos segundos.</p>
+  <div id="contenido">Cargando...</div>
+  <script>
+    async function actualizar() {
+      const el = document.getElementById('contenido');
+      try {
+        const r = await fetch('/qr-estado');
+        const data = await r.json();
+        if (data.conectado) {
+          el.innerHTML = '<h1>&#9989; Bot conectado a WhatsApp</h1><p>Ya podes cerrar esta pagina.</p>';
+          return;
+        }
+        if (!data.hayQr) {
+          el.innerHTML = '<p>Todavia no hay QR generado. Esperando...</p>';
+          return;
+        }
+        el.innerHTML = '<img src="/qr-image?v=' + data.version + '" width="320" height="320" alt="Codigo QR" />';
+      } catch (e) {
+        el.innerHTML = '<p>No se pudo cargar el estado. Reintentando...</p>';
+      }
+    }
+    actualizar();
+    setInterval(actualizar, 3000);
+  </script>
+</body>
+</html>`);
+      return;
+    }
+
+    if (req.url === "/qr-estado") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ hayQr: !!lastQr, version: qrVersion, conectado: isConnected }));
+      return;
+    }
+
+    if (req.url && req.url.startsWith("/qr-image")) {
       if (!lastQr) {
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("Todavia no hay QR generado, o el bot ya esta conectado. Recarga en unos segundos.");
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Todavia no hay QR generado.");
         return;
       }
       try {
         const png = await QRCode.toBuffer(lastQr, { width: 500, margin: 2 });
-        res.writeHead(200, { "Content-Type": "image/png" });
+        res.writeHead(200, {
+          "Content-Type": "image/png",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        });
         res.end(png);
       } catch (err) {
         res.writeHead(500, { "Content-Type": "text/plain" });
@@ -56,6 +114,7 @@ http
       }
       return;
     }
+
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Bot activo. Entra a /qr para ver el codigo QR.");
   })
@@ -104,15 +163,20 @@ async function startBot() {
 
     if (qr) {
       lastQr = qr;
+      qrVersion += 1;
+      isConnected = false;
       console.log("Nuevo QR generado. Entra a la URL publica + /qr para verlo.");
     }
 
     if (connection === "close") {
+      isConnected = false;
       const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       console.log("Conexion cerrada.", statusCode, "Reconectar:", shouldReconnect);
       if (shouldReconnect) startBot();
     } else if (connection === "open") {
+      isConnected = true;
+      lastQr = null;
       console.log("✅ Bot conectado a WhatsApp.");
     }
   });
