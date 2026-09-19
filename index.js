@@ -29,7 +29,7 @@ const PAYMENT_TEXT = process.env.PAYMENT_TEXT || "Efectivo o transferencia.";
 
 // ---- Groq (IA) ----
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
 const SYSTEM_PROMPT = `Sos el asistente de WhatsApp de ${BUSINESS_NAME}, el emprendimiento de masajes y terapias corporales de Leila. Respondes siempre en espanol de Argentina, con un tono calido y cercano, como un mensaje de WhatsApp: frases cortas, maximo 2 a 4 lineas por respuesta. No uses lenguaje de mail formal.
 
@@ -123,21 +123,6 @@ http
       } catch (err) {
         res.writeHead(500, { "Content-Type": "text/plain" });
         res.end("Error generando el QR: " + err.message);
-      }
-      return;
-    }
-
-    if (req.url === "/debug-modelos") {
-      try {
-        const r = await fetch("https://api.groq.com/openai/v1/models", {
-          headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
-        });
-        const texto = await r.text();
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(texto);
-      } catch (err) {
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end("Error: " + err.message);
       }
       return;
     }
