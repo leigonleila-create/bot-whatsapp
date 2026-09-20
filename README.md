@@ -1,12 +1,17 @@
 # bot-whatsapp
 
-Bot de WhatsApp de **Corpore** (masajes y terapias corporales). Cuando
-alguien le escribe a Leila por primera vez, el bot contesta con UN solo
-mensaje de bienvenida generado con Inteligencia Artificial (Groq), usando
-la info del negocio. Despues de ese mensaje queda en silencio en esa
-conversacion, para que Leila la siga en persona. Nunca da precio exacto,
-direccion exacta ni confirma turnos: esas tres cosas siempre las coordina
-Leila personalmente.
+Bot del numero personal de WhatsApp de Leila. Por ese numero le escriben
+por 3 motivos (**Corpore** masajes, **consultoria de IA**, **venta de
+terrenos en Merida**) ademas de amigos que le escriben para charlar.
+
+Cuando alguien escribe por primera vez, el bot (con Inteligencia
+Artificial, Groq) lee ese mensaje, detecta de que tema es, y contesta UNA
+sola vez con el saludo que corresponda. Si el mensaje es una charla
+personal (no tiene nada que ver con los 3 temas), el bot no contesta
+nada. Despues de ese primer mensaje (si lo hay), el bot queda en
+silencio en esa conversacion para que Leila la siga en persona. Nunca da
+precio exacto, direcciones/ubicaciones exactas ni confirma turnos o
+disponibilidad: eso siempre lo coordina Leila personalmente.
 
 ## 1. Subir estos archivos a GitHub
 
@@ -36,15 +41,19 @@ En tu servicio de Railway, pestaña **Variables**, agrega:
 
 ## Como se comporta
 
-- La primera vez que alguien te escribe, el bot manda un mensaje de
-  bienvenida (con IA) contando los servicios y avisando que vos le vas
-  a responder en breve.
-- Despues de ese primer mensaje, el bot queda en silencio en esa
-  conversacion para siempre (hasta que el servicio se reinicie), asi
+- La primera vez que alguien te escribe, la IA lee ese mensaje y detecta
+  de que tema es: Corpore, consultoria de IA, terrenos, o ninguno de los
+  tres (charla personal).
+- Si es de alguno de los 3 temas, manda un mensaje de bienvenida breve
+  con la info de ese tema y avisa que vos le vas a responder en breve.
+- Si no es de ninguno de los 3 (por ejemplo un amigo saludando), el bot
+  no contesta nada: nunca se mete en una charla personal.
+- Despues de ese primer mensaje (si lo hubo), el bot queda en silencio en
+  esa conversacion para siempre (hasta que el servicio se reinicie), asi
   vos segui charlando en persona sin que el bot interrumpa.
 - Si el bot se reinicia (por ejemplo, por un redeploy), "olvida" a quien
-  ya saludo, y le va a volver a mandar el mensaje de bienvenida la
-  proxima vez que esa persona escriba.
+  ya evaluo, y va a volver a evaluar el proximo mensaje de esa persona
+  como si fuera la primera vez.
 
 ## Importante: la sesion no es permanente
 

@@ -1,9 +1,18 @@
 /**
- * Bot de WhatsApp de Corpore (masajes y terapias corporales).
- * Responde con Inteligencia Artificial (Groq) usando la info del negocio,
- * respetando reglas fijas: nunca da precio exacto, nunca da la direccion
- * exacta (es la casa de Leila) y nunca inventa disponibilidad de turnos.
- * Esas tres cosas siempre las confirma Leila personalmente.
+ * Bot de WhatsApp del numero personal de Leila. Un solo numero, tres
+ * actividades (Corpore, consultoria de IA, venta de terrenos en Merida)
+ * mas charlas personales con amigos/conocidos.
+ *
+ * Cuando alguien escribe por primera vez, la IA (Groq) lee ese primer
+ * mensaje, detecta de que tema se trata y responde UNA sola vez con el
+ * saludo que corresponda. Si el mensaje no tiene nada que ver con ninguna
+ * de las 3 actividades (charla personal), el bot no contesta nada: nunca
+ * se mete en una conversacion personal ni en una conversacion ya empezada.
+ *
+ * Reglas fijas que la IA nunca puede romper: nunca da precio exacto,
+ * nunca da la direccion exacta de Corpore ni la ubicacion exacta de un
+ * terreno, y nunca inventa ni confirma disponibilidad (turnos, terrenos,
+ * documentacion). Esas cosas siempre las confirma Leila personalmente.
  *
  * Toda la info se configura con variables de entorno, asi no hay que
  * tocar el codigo para cambiar los textos.
@@ -31,22 +40,34 @@ const PAYMENT_TEXT = process.env.PAYMENT_TEXT || "Efectivo o transferencia.";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
-const SYSTEM_PROMPT = `Sos el asistente automatico de WhatsApp de ${BUSINESS_NAME}, el emprendimiento de masajes y terapias corporales de Leila.
+const SILENCIO = "SILENCIO";
 
-Tu unica tarea es escribir UN solo mensaje de bienvenida para alguien que le escribe a Leila por primera vez. Despues de este mensaje no participas mas en esa conversacion: a partir de ahi responde Leila en persona.
+const SYSTEM_PROMPT = `Sos el asistente automatico del numero personal de WhatsApp de Leila. Por este numero le escriben por 3 motivos distintos, ademas de amigos/conocidos que le escriben solo para charlar con ella:
 
-Ese mensaje de bienvenida tiene que, en espanol de Argentina, con tono calido y cercano (estilo WhatsApp: frases cortas, maximo 2 a 4 lineas, sin lenguaje de mail formal):
-- Agradecer que haya escrito.
-- Contar brevemente que servicios ofrece ${BUSINESS_NAME}: ${SERVICES_TEXT}
-- Mencionar las formas de pago: ${PAYMENT_TEXT}
-- Avisar que Leila le responde personalmente en breve para coordinar lo que necesite.
+1. ${BUSINESS_NAME} (masajes y terapias corporales, en la casa de Leila).
+   Servicios: ${SERVICES_TEXT}
+   Formas de pago: ${PAYMENT_TEXT}
 
-Reglas que NUNCA podes romper:
-1. Nunca des un precio exacto. Eso lo confirma Leila cuando coordina el turno.
-2. Nunca des la direccion exacta ni la zona o el barrio. Es la casa particular de Leila, no tiene local.
-3. Nunca inventes ni confirmes disponibilidad de horarios o turnos: eso lo maneja Leila personalmente.
+2. Consultoria de Inteligencia Artificial. Leila recien esta arrancando con esto: todavia no tiene servicios ni precios definidos.
+
+3. Venta de terrenos en Merida, Yucatan (Mexico).
+
+Tu unica tarea es leer el PRIMER mensaje que le escriben a Leila y reaccionar asi:
+
+- Si el mensaje pregunta o habla de MASAJES o de ${BUSINESS_NAME}: responde UN mensaje breve (espanol de Argentina, tono calido, estilo WhatsApp, 2 a 4 lineas) que agradezca, cuente brevemente los servicios y las formas de pago, y avise que Leila responde en breve para coordinar.
+
+- Si el mensaje pregunta o habla de CONSULTORIA DE IA, inteligencia artificial, chatbots o asesoria tecnologica: responde UN mensaje breve agradeciendo el interes, contando que Leila esta arrancando con esto, y que se va a contactar personalmente para charlar mas. No prometas servicios ni precios: todavia no estan definidos.
+
+- Si el mensaje pregunta o habla de TERRENOS, venta de propiedades, o Merida/Yucatan: responde UN mensaje breve agradeciendo el interes, mencionando solo la zona general (Merida, Yucatan), y avisando que Leila se contacta en breve para dar mas detalles.
+
+- Si el mensaje NO tiene nada que ver con ninguno de estos 3 temas (por ejemplo, alguien que la saluda como amigo/a o le escribe de algo personal): respondes exactamente la palabra ${SILENCIO} y nada mas. Nunca te metas en una charla personal.
+
+Reglas que NUNCA podes romper, para cualquiera de los 3 temas:
+1. Nunca des un precio exacto de nada.
+2. Nunca des la direccion exacta de la casa de Leila ni la ubicacion exacta de un terreno (solo la zona general).
+3. Nunca inventes ni confirmes disponibilidad: turnos, terrenos, metros, documentacion. Eso lo confirma Leila personalmente.
 4. Nunca inventes informacion que no tengas en este mensaje.
-5. No sos Leila, sos su asistente automatico. No sigas la conversacion mas alla del mensaje de bienvenida.`;
+5. No sos Leila, sos su asistente automatico. Mandas UN solo mensaje (o ${SILENCIO}) y no seguis la conversacion despues: eso lo hace Leila en persona.`;
 
 const AUTH_FOLDER = "auth_info";
 
@@ -139,12 +160,11 @@ http
     console.log("Servidor web escuchando en el puerto", process.env.PORT || 3000);
   });
 
-// Respuesta fija de emergencia (si todavia no se configuro Groq, o si la
-// IA falla). Asi el bot nunca queda mudo con el primer mensaje.
+// Respuesta fija de emergencia, solo para cuando todavia no se configuro
+// GROQ_API_KEY (sin la IA no hay forma de saber de que tema es el mensaje,
+// asi que usamos un texto neutro que no menciona ningun negocio puntual).
 const RESPUESTA_SIN_IA =
-  `Hola! Somos *${BUSINESS_NAME}* 👋\n\n` +
-  `Gracias por escribir. En breve te responde Leila personalmente. ` +
-  `Servicios: ${SERVICES_TEXT}`;
+  `Hola! 👋 Gracias por escribir. En breve te responde Leila personalmente.`;
 
 // Chats a los que ya les mandamos el mensaje de bienvenida. El bot solo
 // contesta la PRIMERA vez que alguien escribe; despues queda en silencio
@@ -247,10 +267,21 @@ async function startBot() {
         { role: "user", content: texto },
       ];
       const respuestaIA = await preguntarIA(mensajesParaIA);
-      await sock.sendMessage(jid, { text: respuestaIA || RESPUESTA_SIN_IA });
+
+      const esSilencio =
+        !respuestaIA || respuestaIA.trim().toUpperCase().startsWith(SILENCIO);
+
+      if (esSilencio) {
+        console.log("Primer mensaje no parece ser de negocio, no contesto:", jid);
+        return;
+      }
+
+      await sock.sendMessage(jid, { text: respuestaIA });
     } catch (err) {
-      console.error("Error consultando la IA:", err.message);
-      await sock.sendMessage(jid, { text: RESPUESTA_SIN_IA });
+      // Si la IA falla no sabemos de que tema era el mensaje, asi que
+      // preferimos quedarnos en silencio antes que mandar algo que no
+      // corresponda a una charla personal.
+      console.error("Error consultando la IA, no contesto:", err.message);
     }
   });
 }
