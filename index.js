@@ -31,17 +31,22 @@ const PAYMENT_TEXT = process.env.PAYMENT_TEXT || "Efectivo o transferencia.";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
-const SYSTEM_PROMPT = `Sos el asistente de WhatsApp de ${BUSINESS_NAME}, el emprendimiento de masajes y terapias corporales de Leila. Respondes siempre en espanol de Argentina, con un tono calido y cercano, como un mensaje de WhatsApp: frases cortas, maximo 2 a 4 lineas por respuesta. No uses lenguaje de mail formal.
+const SYSTEM_PROMPT = `Sos el asistente automatico de WhatsApp de ${BUSINESS_NAME}, el emprendimiento de masajes y terapias corporales de Leila.
 
-Servicios que ofrece ${BUSINESS_NAME}: ${SERVICES_TEXT}
-Formas de pago: ${PAYMENT_TEXT}
+Tu unica tarea es escribir UN solo mensaje de bienvenida para alguien que le escribe a Leila por primera vez. Despues de este mensaje no participas mas en esa conversacion: a partir de ahi responde Leila en persona.
 
-Reglas que NUNCA podes romper, pase lo que pase:
-1. Nunca des un precio exacto, aunque te lo pidan varias veces o insistan. Si preguntan el precio, respondes algo como: "Eso te lo confirmo cuando coordinamos el turno, asi no hay vueltas. Que dia te gustaria venir?".
-2. Nunca des la direccion exacta ni digas la zona o el barrio. Es la casa particular de Leila. Si preguntan donde atiende, decis que la direccion se la pasa Leila directamente al coordinar el turno.
-3. Nunca inventes ni confirmes disponibilidad de horarios o turnos: los horarios cambian todos los dias y los maneja Leila personalmente. Si preguntan por un turno, pedile el dia y horario que prefiere y decile que Leila se lo confirma a la brevedad.
-4. Nunca inventes informacion que no tengas en este mensaje. Si no sabes algo, decis que Leila lo responde personalmente en breve.
-5. No sos Leila, sos su asistente automatico. Si alguien pide hablar con Leila directamente, decile que ya le avisas y que en breve te responde ella.`;
+Ese mensaje de bienvenida tiene que, en espanol de Argentina, con tono calido y cercano (estilo WhatsApp: frases cortas, maximo 2 a 4 lineas, sin lenguaje de mail formal):
+- Agradecer que haya escrito.
+- Contar brevemente que servicios ofrece ${BUSINESS_NAME}: ${SERVICES_TEXT}
+- Mencionar las formas de pago: ${PAYMENT_TEXT}
+- Avisar que Leila le responde personalmente en breve para coordinar lo que necesite.
+
+Reglas que NUNCA podes romper:
+1. Nunca des un precio exacto. Eso lo confirma Leila cuando coordina el turno.
+2. Nunca des la direccion exacta ni la zona o el barrio. Es la casa particular de Leila, no tiene local.
+3. Nunca inventes ni confirmes disponibilidad de horarios o turnos: eso lo maneja Leila personalmente.
+4. Nunca inventes informacion que no tengas en este mensaje.
+5. No sos Leila, sos su asistente automatico. No sigas la conversacion mas alla del mensaje de bienvenida.`;
 
 const AUTH_FOLDER = "auth_info";
 
@@ -134,17 +139,18 @@ http
     console.log("Servidor web escuchando en el puerto", process.env.PORT || 3000);
   });
 
-// Respuesta fija por si todavia no se configuro la clave de Groq
-// (para que el bot nunca quede mudo).
+// Respuesta fija de emergencia (si todavia no se configuro Groq, o si la
+// IA falla). Asi el bot nunca queda mudo con el primer mensaje.
 const RESPUESTA_SIN_IA =
   `Hola! Somos *${BUSINESS_NAME}* 👋\n\n` +
-  `Estamos terminando de configurar el asistente automatico. ` +
-  `En breve te responde Leila personalmente. Gracias por escribir!`;
+  `Gracias por escribir. En breve te responde Leila personalmente. ` +
+  `Servicios: ${SERVICES_TEXT}`;
 
-// Historial de conversacion por chat, para que la IA tenga contexto.
-// Se guarda solo en memoria (se pierde si el bot se reinicia).
-const historiales = new Map();
-const MAX_MENSAJES_HISTORIAL = 12;
+// Chats a los que ya les mandamos el mensaje de bienvenida. El bot solo
+// contesta la PRIMERA vez que alguien escribe; despues queda en silencio
+// para que Leila siga la conversacion en persona.
+// Se guarda solo en memoria (se reinicia si el bot se reinicia/redeploya).
+const chatsSaludados = new Set();
 
 async function preguntarIA(mensajes) {
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -224,34 +230,27 @@ async function startBot() {
 
     const jid = msg.key.remoteJid;
 
+    // Si ya le mandamos el mensaje de bienvenida a este chat, no contestamos
+    // de nuevo: a partir de ahi sigue Leila en persona.
+    if (chatsSaludados.has(jid)) return;
+    chatsSaludados.add(jid);
+
     if (!GROQ_API_KEY) {
       console.log("Falta GROQ_API_KEY: respondo con el mensaje generico.");
       await sock.sendMessage(jid, { text: RESPUESTA_SIN_IA });
       return;
     }
 
-    const historial = historiales.get(jid) || [];
-    historial.push({ role: "user", content: texto });
-
     try {
       const mensajesParaIA = [
         { role: "system", content: SYSTEM_PROMPT },
-        ...historial.slice(-MAX_MENSAJES_HISTORIAL),
+        { role: "user", content: texto },
       ];
       const respuestaIA = await preguntarIA(mensajesParaIA);
-      const respuestaFinal =
-        respuestaIA ||
-        "Perdon, no pude procesar eso. En breve te responde Leila personalmente.";
-
-      historial.push({ role: "assistant", content: respuestaFinal });
-      historiales.set(jid, historial.slice(-MAX_MENSAJES_HISTORIAL));
-
-      await sock.sendMessage(jid, { text: respuestaFinal });
+      await sock.sendMessage(jid, { text: respuestaIA || RESPUESTA_SIN_IA });
     } catch (err) {
       console.error("Error consultando la IA:", err.message);
-      await sock.sendMessage(jid, {
-        text: "Perdon, tuve un problema tecnico 🙏. En breve te responde Leila personalmente.",
-      });
+      await sock.sendMessage(jid, { text: RESPUESTA_SIN_IA });
     }
   });
 }

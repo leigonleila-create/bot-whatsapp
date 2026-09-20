@@ -1,9 +1,12 @@
 # bot-whatsapp
 
-Bot de WhatsApp de **Corpore** (masajes y terapias corporales). Responde
-con Inteligencia Artificial (Groq) usando la info del negocio, y nunca
-da precio exacto, direccion exacta ni confirma turnos: esas tres cosas
-siempre las coordina Leila personalmente.
+Bot de WhatsApp de **Corpore** (masajes y terapias corporales). Cuando
+alguien le escribe a Leila por primera vez, el bot contesta con UN solo
+mensaje de bienvenida generado con Inteligencia Artificial (Groq), usando
+la info del negocio. Despues de ese mensaje queda en silencio en esa
+conversacion, para que Leila la siga en persona. Nunca da precio exacto,
+direccion exacta ni confirma turnos: esas tres cosas siempre las coordina
+Leila personalmente.
 
 ## 1. Subir estos archivos a GitHub
 
@@ -30,6 +33,18 @@ En tu servicio de Railway, pestaña **Variables**, agrega:
    Vincular un dispositivo, y apunta la camara al QR de la pantalla.
 4. Cuando la pagina diga "✅ Bot conectado a WhatsApp", ya esta
    funcionando.
+
+## Como se comporta
+
+- La primera vez que alguien te escribe, el bot manda un mensaje de
+  bienvenida (con IA) contando los servicios y avisando que vos le vas
+  a responder en breve.
+- Despues de ese primer mensaje, el bot queda en silencio en esa
+  conversacion para siempre (hasta que el servicio se reinicie), asi
+  vos segui charlando en persona sin que el bot interrumpa.
+- Si el bot se reinicia (por ejemplo, por un redeploy), "olvida" a quien
+  ya saludo, y le va a volver a mandar el mensaje de bienvenida la
+  proxima vez que esa persona escriba.
 
 ## Importante: la sesion no es permanente
 
